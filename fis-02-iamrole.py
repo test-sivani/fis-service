@@ -5,7 +5,7 @@ def get_resource_id(event_manager, service_manager, logs_manager):
         responseElements = event_manager.get_value('responseElements')
         experimentTemplate = responseElements["experimentTemplate"]
         Id = experimentTemplate["id"]
-        roleARN = experimentTemplate["roleArn"]        
+        roleARN = experimentTemplate.get("roleArn")  # Use .get() to handle missing keys gracefully
         logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
         return Id, roleARN
     except Exception as e:
@@ -112,6 +112,14 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
         # Determine compliance status
         compliance_status = 'Compliant' if compliant else 'Non-Compliant'
         
+        # Update compliance and logs based on compliance status
+        if compliant:
+            compliance.update("COMPLIANT", f"FIS Experiment Template {Id} is compliant")
+            logs_manager.info(f"FIS Experiment Template {Id} is compliant")
+        else:
+            compliance.update("NON-COMPLIANT", f"FIS Experiment Template {Id} is non-compliant")
+            logs_manager.info(f"FIS Experiment Template {Id} is non-compliant")
+        
         # Construct response
         response_body = {
             'AWSManagedPolicies': aws_managed_policies,
@@ -139,7 +147,8 @@ def remediate(resource_id, event_manager, service_manager, logs_manager, remedia
     iam_client = service_manager.get_client("iam")
     roleARN, Id = resource_id
     try:
-        remediation.update("SUCCESS", f"FIS Experiment Template {resource_id} has been deleted")
-        logs_manager.info(f"FIS Experiment Template {resource_id} has been deleted")
+        remediation.update("SUCCESS", f"FIS Experiment Template {Id} has been deleted")
+        logs_manager.info(f"FIS Experiment Template {Id} has been deleted")
     except Exception as e:
-        return False, str(e)
+        remediation.update("FAIL", f"{e}")
+        logs_manager.error(e)
