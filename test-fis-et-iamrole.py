@@ -33,7 +33,7 @@ def get_iam_role_policies(role_name, target_services):
                         customer_managed_policy_actions.append(actions)
                 if 'Resource' in statement:
                     resource = statement['Resource']
-                    if resource == '*':
+                    if resource == ["*"]:
                         customer_managed_policy_resources_with_star.append(policy_info['Policy']['PolicyName'])
     
     # Get inline policies
@@ -52,7 +52,7 @@ def get_iam_role_policies(role_name, target_services):
                     inline_policy_actions.append(actions)
             if 'Resource' in statement:
                 resource = statement['Resource']
-                if resource == '*':
+                if resource == ["*"]:
                     inline_policy_resources_with_star.append(policy_name)
     
     # Compare actions with target_services
@@ -127,7 +127,7 @@ def lambda_handler(event, context):
         if policies_info['ExtraActions']:
             compliant = False
         
-        # Condition 3: Check for * in customer managed policies
+        # Condition 3: Check for * in customer managed policies or inline policies
         if policies_info['InlinePolicyResourcesWithStar'] or policies_info['CustomerManagedPolicyResourcesWithStar']:
             compliant = False
         
