@@ -1,35 +1,40 @@
-
-Output:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:RunInstances"
+            ],
+            "Resource": [
+                "*"
+            ]
+        }
+    ]
+}
 
 {
-  "statusCode": 200,
-  "body": {
-    "AWSManagedPolicies": [
-      "Test-FIS-Role-HM-ideal-Policy-us-west-2",
-      "AlexaForBusinessFullAccess"
-    ],
-    "InlinePolicyActions": [
-      "ec2:DeleteCoipPool"
-    ],
-    "InlinePolicyResourcesWithStar": [
-      "ec2"
-    ],
-    "CustomerManagedPolicyActions": [
-      "ec2:*",
-      "a4b:*",
-      "kms:DescribeKey",
-      "iam:CreateServiceLinkedRole",
-      "iam:DeleteServiceLinkedRole",
-      "iam:GetServiceLinkedRoleDeletionStatus",
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:DeleteSecret",
-      "secretsmanager:UpdateSecret",
-      "secretsmanager:CreateSecret"
-    ],
-    "CustomerManagedPolicyResourcesWithStar": [
-      "AlexaForBusinessFullAccess",
-      "AlexaForBusinessFullAccess",
-      "AlexaForBusinessFullAccess"
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:RunInstances",
+                "ec2:StopInstances"
+            ],
+            "Resource": [
+                "arn:aws:ec2:us-east-1:697447276703:instance/i-002ed404d638b8536"
+            ],
+            "Condition": {
+                "ForAnyValue:StringEquals": {
+                    "aws:SourceAccount": [
+                        "459684458936",
+                        "697447276703"
+                    ]
+                }
+            }
+        }
     ]
-  }
 }
