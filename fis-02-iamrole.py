@@ -1,46 +1,152 @@
-
 import boto3
-import json
 
-def get_resource_id(event_manager, service_manager, logs_manager):
+def get_resource(event, context):
     try:
-        responseElements = event_manager.get_value("responseElements")
-        print(responseElements)
+        service_manager = boto3.client('fis')
+        logs_manager = boto3.client('fis')
+
+        responseElements = event.get('responseElements')
         experimentTemplate = responseElements["experimentTemplate"]
-        print(experimentTemplate)
         Id = experimentTemplate["id"]
-        print(Id)
-        roleARN = experimentTemplate["roleArn"]
-        print(roleARN)
+        roleARN = experimentTemplate["roleArn"]        
         logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
         return Id, roleARN
+    
     except Exception as e:
         logs_manager.error(e)
-        return "UNKNOWN"
-    
-def evaluate(resource_id, event_manager, service_manager, logs_manager, compliance):
+        return None
+
+def evaluate(resource_id):
     try:
-        fis_client = service_manager.get_client("fis")
-        iam_client = service_manager.get_client("iam")
-        Id, roleARN = resource_id
-        role_name = roleARN.split("/")[-1]
-        response = fis_client.get_experiment_template(id= Id)
-        target_actions = response['experimentTemplate']['targets']
-        managed_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+        # Initialize clients
+        service_manager = boto3.client('fis')
+        iam_client = boto3.client('iam')
+        roleARN, Id = resource_id
+        # Extract template_id and role_arn from resource_id
+        role_name = roleARN.split('/')[-1]
+        
+        # Get FIS template details
+        response = service_manager.get_experiment_template(id=Id)
+        experiment_template = response['experimentTemplate']
+        
+        # Initialize variables to store policy information
+        aws_managed_policies = []
+        inline_policy_actions = []
+        inline_policy_resources_with_star = []
+        customer_managed_policy_actions = []
+        customer_managed_policy_resources_with_star = []
+        extra_actions = set()
+        
+        # Get attached managed policies
+        attached_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+        
+        for policy in attached_policies['AttachedPolicies']:
+            policy_arn = policy['PolicyArn']
+            policy_info = iam_client.get_policy(PolicyArn=policy_arn)
+            if policy_info['Policy']['Arn'].startswith('arn:aws:iam::aws:policy/'):
+                # This is an AWS managed policy
+                aws_managed_policies.append(policy_info['Policy']['PolicyName'])
+            else:
+                # This is a customer managed policy
+                policy_version = policy_info['Policy']['DefaultVersionId']
+                policy_document = iam_client.get_policy_version(PolicyArn=policy_arn, VersionId=policy_version)['PolicyVersion']['Document']
+                for statement in policy_document['Statement']:
+                    if 'Action' in statement:
+                        actions = statement['Action']
+                        if isinstance(actions, list):
+                            customer_managed_policy_actions.extend(actions)
+                        else:
+                            customer_managed_policy_actions.append(actions)
+                    if 'Resource' in statement:
+                        resource = statement['Resource']
+                        if resource == ["*"]:
+                            customer_managed_policy_resources_with_star.append(policy_info['Policy']['PolicyName'])
+        
+        # Get inline policies
         inline_policies = iam_client.list_role_policies(RoleName=role_name)
         
-
-                        
+        for policy_name in inline_policies['PolicyNames']:
+            policy = iam_client.get_role_policy(RoleName=role_name, PolicyName=policy_name)
+            policy_document = policy['PolicyDocument']
+            
+            policy_has_star_resource = False
+            
+            for statement in policy_document['Statement']:
+                if 'Action' in statement:
+                    actions = statement['Action']
+                    if isinstance(actions, list):
+                        inline_policy_actions.extend(actions)
+                    else:
+                        inline_policy_actions.append(actions)
+                if 'Resource' in statement:
+                    resource = statement['Resource']
+                    if resource == "*":
+                        policy_has_star_resource = True
+            
+            if policy_has_star_resource:
+                inline_policy_resources_with_star.append(policy_name)
+        
+        # Compare actions with target_services
+        target_services = set()
+        for target in experiment_template['targets']:
+            resource_type = target['resourceType']
+            service_name = resource_type.split(':')[1]  # Extract service name
+            target_services.add(service_name)
+        
+        for actions in [inline_policy_actions, customer_managed_policy_actions]:
+            for action in actions:
+                service = action.split(':')[0]
+                if service not in target_services:
+                    extra_actions.add(action)
+        
+        # Check conditions for compliance
+        compliant = True
+        
+        # Condition 1: Check for AWS managed policies
+        if aws_managed_policies:
+            compliant = False
+        
+        # Condition 2: Check for extra actions
+        if extra_actions:
+            compliant = False
+        
+        # Condition 3: Check for * in customer managed policies or inline policies
+        if inline_policy_resources_with_star or customer_managed_policy_resources_with_star:
+            compliant = False
+        
+        # Determine compliance status
+        compliance_status = 'Compliant' if compliant else 'Non-Compliant'
+        
+        # Construct response
+        response_body = {
+            'AWSManagedPolicies': aws_managed_policies,
+            'InlinePolicyActions': inline_policy_actions,
+            'InlinePolicyResourcesWithStar': inline_policy_resources_with_star,
+            'CustomerManagedPolicyActions': customer_managed_policy_actions,
+            'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star,
+            'ExtraActions': list(extra_actions),
+            'ComplianceStatus': compliance_status
+        }
+        
+        return {
+            'statusCode': 200,
+            'body': response_body
+        }
+    
     except Exception as e:
-        compliance.update("UNKNOWN", f"{e}")
-        logs_manager.error(e)
+        return {
+            'statusCode': 500,
+            'body': str(e)
+        }
 
-def remediate(resource_id, event_manager, service_manager, logs_manager, remediation):
-    fis_client = service_manager.get_client("fis")
+import boto3
+
+def remediate(resource_id):
+    fis_client = boto3.client('fis')
+    roleARN, Id = resource_id
     try:
-        response = fis_client.delete_experiment_template(id= resource_id)
-        remediation.update("SUCCESS", f"FIS Experiment Template {resource_id} has been deleted")
-        logs_manager.info(f"FIS Experiment Template {resource_id} has been deleted")
+        response = fis_client.delete_experiment_template(id=resource_id)
+        return True, f"FIS Experiment Template {resource_id} has been deleted"
     except Exception as e:
-        remediation.update("FAIL", f"{e}")
-        logs_manager.error(e)
+        return False, str(e)
+
