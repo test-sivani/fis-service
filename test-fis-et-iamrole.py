@@ -1,6 +1,4 @@
 import boto3
-import json
-import subprocess
 
 def get_iam_role_policies(role_name):
     # Create an IAM client
@@ -62,23 +60,19 @@ def get_iam_role_policies(role_name):
     }
 
 def get_role_from_fis_template(template_id):
-    # Use AWS CLI to describe the FIS experiment template
-    try:
-        result = subprocess.run(
-            ['aws', 'fis', 'describe-experiment-template', '--id', template_id],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        template_details = json.loads(result.stdout)
-        # Extract the role ARN from the template
-        role_arn = template_details['experimentTemplate']['roleArn']
-        # Extract the role name from the ARN
-        role_name = role_arn.split('/')[-1]
-        return role_name
-    except subprocess.CalledProcessError as e:
-        print(f"Error calling AWS CLI: {e}")
-        return None
+    # Create an FIS client
+    fis_client = boto3.client('fis')
+    
+    # Describe the FIS experiment template
+    template_details = fis_client.describe_experiment_template(id=template_id)
+    
+    # Extract the role ARN from the template
+    role_arn = template_details['experimentTemplate']['roleArn']
+    
+    # Extract the role name from the ARN
+    role_name = role_arn.split('/')[-1]
+    
+    return role_name
 
 def lambda_handler(event, context):
     template_id = event.get('template_id')
