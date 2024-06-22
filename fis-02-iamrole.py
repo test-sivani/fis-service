@@ -7,7 +7,7 @@ def get_resource_id(event_manager, service_manager, logs_manager):
         Id = experimentTemplate["id"]
         roleARN = experimentTemplate.get("roleArn")  # Use .get() to handle missing keys gracefully
         logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
-        return Id, roleARN
+        return Id, roleARN, experimentTemplate
     except Exception as e:
         logs_manager.error(e)
         return None
@@ -16,13 +16,10 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
     try:
         fis_client = service_manager.get_client("fis")
         iam_client = service_manager.get_client("iam")
-        roleARN, Id = resource_id
+        Id, roleARN, experimentTemplate = resource_id
         # Extract template_id and role_arn from resource_id
         role_name = roleARN.split('/')[-1]
-        
-        # Get FIS template details
-        response = fis_client.get_experiment_template(id=Id)
-        experiment_template = response['experimentTemplate']
+        experiment_template = experimentTemplate
         
         # Initialize variables to store policy information
         aws_managed_policies = []
@@ -100,53 +97,56 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
         # Condition 1: Check for AWS managed policies
         if aws_managed_policies:
             compliant = False
+            print("test-1")
         
         # Condition 2: Check for extra actions
         if extra_actions:
             compliant = False
+            print("test-2")
         
         # Condition 3: Check for * in customer managed policies or inline policies
         if inline_policy_resources_with_star or customer_managed_policy_resources_with_star:
             compliant = False
+            print("test-3")
         
         # Determine compliance status
         compliance_status = 'Compliant' if compliant else 'Non-Compliant'
+        print("test-4")
         
         # Update compliance and logs based on compliance status
         if compliant:
             compliance.update("COMPLIANT", f"FIS Experiment Template {Id} is compliant")
-            logs_manager.info(f"FIS Experiment Template {Id} is compliant")
+            logs_manager.info(f"FIS Experiment Template {Id} IAM role has only required permissions")
         else:
             compliance.update("NON-COMPLIANT", f"FIS Experiment Template {Id} is non-compliant")
-            logs_manager.info(f"FIS Experiment Template {Id} is non-compliant")
+            logs_manager.info(f"FIS Experiment Template {Id} IAM role is overly permissive")
         
         # Construct response
-        response_body = {
-            'AWSManagedPolicies': aws_managed_policies,
-            'InlinePolicyActions': inline_policy_actions,
-            'InlinePolicyResourcesWithStar': inline_policy_resources_with_star,
-            'CustomerManagedPolicyActions': customer_managed_policy_actions,
-            'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star,
-            'ExtraActions': list(extra_actions),
-            'ComplianceStatus': compliance_status
-        }
-        
-        return {
-            'statusCode': 200,
-            'body': response_body
-        }
+        # response_body = {
+            # 'AWSManagedPolicies': aws_managed_policies,
+            # 'InlinePolicyActions': inline_policy_actions,
+            # 'InlinePolicyResourcesWithStar': inline_policy_resources_with_star,
+            # 'CustomerManagedPolicyActions': customer_managed_policy_actions,
+            # 'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star,
+            # 'ExtraActions': list(extra_actions),
+            # 'ComplianceStatus': compliance_status
+        # }
+        # 
+        # return {
+            # 'statusCode': 200,
+            # 'body': response_body
+        # }
     
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'body': str(e)
-        }
+        compliance.update("UNKNOWN", f"{e}")
+        logs_manager.error(e)
 
 def remediate(resource_id, event_manager, service_manager, logs_manager, remediation):
     fis_client = service_manager.get_client("fis")
     iam_client = service_manager.get_client("iam")
     roleARN, Id = resource_id
     try:
+        response = fis_client.delete_experiment_template(id= Id)
         remediation.update("SUCCESS", f"FIS Experiment Template {Id} has been deleted")
         logs_manager.info(f"FIS Experiment Template {Id} has been deleted")
     except Exception as e:
