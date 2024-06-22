@@ -74,12 +74,14 @@ def get_role_and_targets_from_fis_template(template_id):
     
     # Extract targets and their resource types
     targets = template_details['experimentTemplate']['targets']
-    target_services = []
+    services_set = set()  # Use a set to store unique services
     
     for target_id, target_info in targets.items():
         resource_type = target_info['resourceType']
-        service_name = resource_type.split(':')[0]  # Extract service name
-        target_services.append(service_name)
+        service_name = resource_type.split(':')[1]  # Extract service name
+        services_set.add(service_name)
+    
+    target_services = list(services_set)  # Convert set back to list
     
     return role_name, target_services
 
