@@ -1,32 +1,27 @@
 import boto3
 
-def get_resource(event, context):
+def get_resource_id(event_manager, service_manager, logs_manager):
     try:
-        service_manager = boto3.client('fis')
-        logs_manager = boto3.client('fis')
-
-        responseElements = event.get('responseElements')
+        responseElements = event_manager.get_value('responseElements')
         experimentTemplate = responseElements["experimentTemplate"]
         Id = experimentTemplate["id"]
         roleARN = experimentTemplate["roleArn"]        
         logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
         return Id, roleARN
-    
     except Exception as e:
         logs_manager.error(e)
         return None
 
-def evaluate(resource_id):
+def evaluate(resource_id, event_manager, service_manager, logs_manager, compliance):
     try:
-        # Initialize clients
-        service_manager = boto3.client('fis')
-        iam_client = boto3.client('iam')
+        fis_client = service_manager.get_client("fis")
+        iam_client = service_manager.get_client("iam")
         roleARN, Id = resource_id
         # Extract template_id and role_arn from resource_id
         role_name = roleARN.split('/')[-1]
         
         # Get FIS template details
-        response = service_manager.get_experiment_template(id=Id)
+        response = fis_client.get_experiment_template(id=Id)
         experiment_template = response['experimentTemplate']
         
         # Initialize variables to store policy information
@@ -139,14 +134,12 @@ def evaluate(resource_id):
             'body': str(e)
         }
 
-import boto3
-
-def remediate(resource_id):
-    fis_client = boto3.client('fis')
+def remediate(resource_id, event_manager, service_manager, logs_manager, remediation):
+    fis_client = service_manager.get_client("fis")
+    iam_client = service_manager.get_client("iam")
     roleARN, Id = resource_id
     try:
-        response = fis_client.delete_experiment_template(id=resource_id)
-        return True, f"FIS Experiment Template {resource_id} has been deleted"
+        remediation.update("SUCCESS", f"FIS Experiment Template {resource_id} has been deleted")
+        logs_manager.info(f"FIS Experiment Template {resource_id} has been deleted")
     except Exception as e:
         return False, str(e)
-
