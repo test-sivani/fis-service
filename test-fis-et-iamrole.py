@@ -43,6 +43,8 @@ def get_iam_role_policies(role_name, target_services):
         policy = iam_client.get_role_policy(RoleName=role_name, PolicyName=policy_name)
         policy_document = policy['PolicyDocument']
         
+        policy_has_star_resource = False
+        
         for statement in policy_document['Statement']:
             if 'Action' in statement:
                 actions = statement['Action']
@@ -53,7 +55,10 @@ def get_iam_role_policies(role_name, target_services):
             if 'Resource' in statement:
                 resource = statement['Resource']
                 if resource == ["*"]:
-                    inline_policy_resources_with_star.append(policy_name)
+                    policy_has_star_resource = True
+        
+        if policy_has_star_resource:
+            inline_policy_resources_with_star.append(policy_name)
     
     # Compare actions with target_services
     extra_actions = set()
