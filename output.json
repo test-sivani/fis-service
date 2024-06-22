@@ -1,3 +1,25 @@
+output:
+{
+  "statusCode": 200,
+  "body": {
+    "AWSManagedPolicies": [],
+    "InlinePolicyActions": [
+      "s3:GetObjectVersionTagging"
+    ],
+    "InlinePolicyResourcesWithStar": [],
+    "CustomerManagedPolicyActions": [
+      "ec2:RunInstances",
+      "ec2:StopInstances"
+    ],
+    "CustomerManagedPolicyResourcesWithStar": [
+      "Test-FIS-Role-HM-ideal-Policy-us-west-2"
+    ],
+    "ExtraActions": [],
+    "ComplianceStatus": "Non-Compliant"
+  }
+}
+
+Inline policies:
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -5,15 +27,14 @@
             "Sid": "VisualEditor0",
             "Effect": "Allow",
             "Action": [
-                "ec2:RunInstances"
+                "s3:GetObjectVersionTagging"
             ],
-            "Resource": [
-                "*"
-            ]
+            "Resource": "*"
         }
     ]
 }
 
+Customer managed:
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -25,7 +46,7 @@
                 "ec2:StopInstances"
             ],
             "Resource": [
-                "arn:aws:ec2:us-east-1:697447276703:instance/i-002ed404d638b8536"
+                "*"
             ],
             "Condition": {
                 "ForAnyValue:StringEquals": {
