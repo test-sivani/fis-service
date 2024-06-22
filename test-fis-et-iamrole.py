@@ -93,7 +93,7 @@ def get_role_and_targets_from_fis_template(template_id):
     return role_name, target_services
 
 def lambda_handler(event, context):
-    template_id = event.get('template_id')
+    template_id = 'EXT3RQhWP2iJToN'
     if not template_id:
         return {
             'statusCode': 400,
