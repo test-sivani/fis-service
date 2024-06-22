@@ -163,5 +163,3 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': str(e)
         }
-
-# This lambda_handler function is the entry point for AWS Lambda execution.
