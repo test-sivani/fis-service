@@ -59,12 +59,12 @@ def get_iam_role_policies(role_name):
         'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star
     }
 
-def get_role_from_fis_template(template_id):
+def get_role_and_targets_from_fis_template(template_id):
     # Create an FIS client
     fis_client = boto3.client('fis')
     
-    # Describe the FIS experiment template
-    template_details = fis_client.describe_experiment_template(id=template_id)
+    # Get the FIS experiment template
+    template_details = fis_client.get_experiment_template(id=template_id)
     
     # Extract the role ARN from the template
     role_arn = template_details['experimentTemplate']['roleArn']
@@ -72,7 +72,16 @@ def get_role_from_fis_template(template_id):
     # Extract the role name from the ARN
     role_name = role_arn.split('/')[-1]
     
-    return role_name
+    # Extract targets and their resource types
+    targets = template_details['experimentTemplate']['targets']
+    target_services = []
+    
+    for target_id, target_info in targets.items():
+        resource_type = target_info['resourceType']
+        service_name = resource_type.split(':')[0]  # Extract service name
+        target_services.append(service_name)
+    
+    return role_name, target_services
 
 def lambda_handler(event, context):
     template_id = event.get('template_id')
@@ -82,7 +91,7 @@ def lambda_handler(event, context):
             'body': 'template_id is required in the event input'
         }
     
-    role_name = get_role_from_fis_template(template_id)
+    role_name, target_services = get_role_and_targets_from_fis_template(template_id)
     if not role_name:
         return {
             'statusCode': 500,
@@ -91,6 +100,7 @@ def lambda_handler(event, context):
     
     try:
         policies_info = get_iam_role_policies(role_name)
+        policies_info['TargetServices'] = target_services
         return {
             'statusCode': 200,
             'body': policies_info
