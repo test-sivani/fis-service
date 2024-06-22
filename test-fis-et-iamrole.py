@@ -1,4 +1,6 @@
 import boto3
+import json
+import subprocess
 
 def get_iam_role_policies(role_name):
     # Create an IAM client
@@ -59,9 +61,39 @@ def get_iam_role_policies(role_name):
         'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star
     }
 
+def get_role_from_fis_template(template_id):
+    # Use AWS CLI to describe the FIS experiment template
+    try:
+        result = subprocess.run(
+            ['aws', 'fis', 'describe-experiment-template', '--id', template_id],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        template_details = json.loads(result.stdout)
+        # Extract the role ARN from the template
+        role_arn = template_details['experimentTemplate']['roleArn']
+        # Extract the role name from the ARN
+        role_name = role_arn.split('/')[-1]
+        return role_name
+    except subprocess.CalledProcessError as e:
+        print(f"Error calling AWS CLI: {e}")
+        return None
+
 def lambda_handler(event, context):
-    # Set the role name directly for testing
-    role_name = 'test_sivani'
+    template_id = event.get('template_id')
+    if not template_id:
+        return {
+            'statusCode': 400,
+            'body': 'template_id is required in the event input'
+        }
+    
+    role_name = get_role_from_fis_template(template_id)
+    if not role_name:
+        return {
+            'statusCode': 500,
+            'body': 'Failed to retrieve role name from FIS template'
+        }
     
     try:
         policies_info = get_iam_role_policies(role_name)
