@@ -10,3 +10,4 @@ in the customer managed get all the actions and assign to a variable. if multipl
 and for the inline policy and customer managed in addition to actions check for Resource filed if it has *
 after this return all the appended aws managed, customer managed and inline policies, 
 
+EXT3RQh6WP2iJToN 
