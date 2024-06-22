@@ -54,7 +54,7 @@ def get_iam_role_policies(role_name, target_services):
                     inline_policy_actions.append(actions)
             if 'Resource' in statement:
                 resource = statement['Resource']
-                if resource == ["*"]:
+                if resource == "*":
                     policy_has_star_resource = True
         
         if policy_has_star_resource:
@@ -104,7 +104,7 @@ def get_role_and_targets_from_fis_template(template_id):
     return role_name, target_services
 
 def lambda_handler(event, context):
-    template_id = event.get('template_id')
+    template_id = 'EXT3RQh6WP2iJToN'
     if not template_id:
         return {
             'statusCode': 400,
@@ -163,5 +163,3 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': str(e)
         }
-
-# This lambda_handler function is the entry point for AWS Lambda execution.
