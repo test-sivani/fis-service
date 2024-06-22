@@ -67,4 +67,15 @@ def lambda_handler(event, context):
         }
     
     try:
-        policies_info = get_iam_role_policies(role_name
+        policies_info = get_iam_role_policies(role_name)
+        return {
+            'statusCode': 200,
+            'body': policies_info
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': str(e)
+        }
+
+# Note: This lambda_handler function is the entry point for AWS Lambda execution.
