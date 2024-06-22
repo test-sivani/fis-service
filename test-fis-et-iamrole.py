@@ -1,11 +1,10 @@
 import boto3
 
-def get_iam_role_policies(role_name):
+def get_iam_role_policies(role_name, target_services):
     # Create an IAM client
     iam_client = boto3.client('iam')
     
     # Initialize variables to store policy information
-    aws_managed_policies = []
     inline_policy_actions = []
     customer_managed_policy_actions = []
     inline_policy_resources_with_star = []
@@ -18,8 +17,8 @@ def get_iam_role_policies(role_name):
         policy_arn = policy['PolicyArn']
         policy_info = iam_client.get_policy(PolicyArn=policy_arn)
         if policy_info['Policy']['Arn'].startswith('arn:aws:iam::aws:policy/'):
-            # This is an AWS managed policy
-            aws_managed_policies.append(policy_info['Policy']['PolicyName'])
+            # Skip AWS managed policies
+            continue
         else:
             # This is a customer managed policy
             policy_version = policy_info['Policy']['DefaultVersionId']
@@ -51,12 +50,20 @@ def get_iam_role_policies(role_name):
             if 'Resource' in statement and statement['Resource'] == '*':
                 inline_policy_resources_with_star.append(policy_name)
     
+    # Compare actions with target_services
+    extra_actions = set()
+    for actions in [inline_policy_actions, customer_managed_policy_actions]:
+        for action in actions:
+            service = action.split(':')[0]
+            if service not in target_services:
+                extra_actions.add(action)
+    
     return {
-        'AWSManagedPolicies': aws_managed_policies,
         'InlinePolicyActions': inline_policy_actions,
         'InlinePolicyResourcesWithStar': inline_policy_resources_with_star,
         'CustomerManagedPolicyActions': customer_managed_policy_actions,
-        'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star
+        'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star,
+        'ExtraActions': list(extra_actions)
     }
 
 def get_role_and_targets_from_fis_template(template_id):
@@ -101,8 +108,7 @@ def lambda_handler(event, context):
         }
     
     try:
-        policies_info = get_iam_role_policies(role_name)
-        policies_info['TargetServices'] = target_services
+        policies_info = get_iam_role_policies(role_name, target_services)
         return {
             'statusCode': 200,
             'body': policies_info
