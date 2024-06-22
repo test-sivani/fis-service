@@ -1,1 +1,35 @@
 
+Output:
+
+{
+  "statusCode": 200,
+  "body": {
+    "AWSManagedPolicies": [
+      "Test-FIS-Role-HM-ideal-Policy-us-west-2",
+      "AlexaForBusinessFullAccess"
+    ],
+    "InlinePolicyActions": [
+      "ec2:DeleteCoipPool"
+    ],
+    "InlinePolicyResourcesWithStar": [
+      "ec2"
+    ],
+    "CustomerManagedPolicyActions": [
+      "ec2:*",
+      "a4b:*",
+      "kms:DescribeKey",
+      "iam:CreateServiceLinkedRole",
+      "iam:DeleteServiceLinkedRole",
+      "iam:GetServiceLinkedRoleDeletionStatus",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:UpdateSecret",
+      "secretsmanager:CreateSecret"
+    ],
+    "CustomerManagedPolicyResourcesWithStar": [
+      "AlexaForBusinessFullAccess",
+      "AlexaForBusinessFullAccess",
+      "AlexaForBusinessFullAccess"
+    ]
+  }
+}
