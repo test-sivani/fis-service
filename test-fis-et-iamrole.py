@@ -1,3 +1,17 @@
+import boto3
+
+def get_resource_id(event_manager, service_manager, logs_manager):
+    try:
+        responseElements = event_manager.get_value('responseElements')
+        experimentTemplate = responseElements["experimentTemplate"]
+        Id = experimentTemplate["id"]
+        roleARN = experimentTemplate.get("roleArn")  # Use .get() to handle missing keys gracefully
+        logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
+        return Id, roleARN, experimentTemplate
+    except Exception as e:
+        logs_manager.error(e)
+        return None
+
 def evaluate(resource_id, event_manager, service_manager, logs_manager, compliance):
     try:
         fis_client = service_manager.get_client("fis")
@@ -110,4 +124,40 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
         
     except Exception as e:
         compliance.update("UNKNOWN", f"{e}")
+        logs_manager.error(e)
+
+def remediate(resource_id, event_manager, service_manager, logs_manager, remediation):
+    try:
+        fis_client = service_manager.get_client("fis")
+        iam_client = service_manager.get_client("iam")
+        roleARN, Id = resource_id
+        role_name = roleARN.split('/')[-1]
+        #checks for managed policies and then delete
+        aws_managed_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+        if aws_managed_policies:
+            for policy in aws_managed_policies:
+                policy_arn = aws_managed_policies['AttachedPolicies'][0]['PolicyArn']
+                policy_arns = []
+                policy_arns.append(policy_arn)
+                for policy_arn in policy_arns:
+                    response = iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+                    remediation.update("SUCCESS", f"FIS Experiment Template IAM role {role_name} managed policy {policy} has been detached")
+        else:
+            print("No Managed Policies attached to this IAM role")
+            return
+        #Checks for inline policies and then delete
+        inline_policies = iam_client.list_role_policies(RoleName=role_name)
+        if inline_policies:
+            for policy_name in inline_policies['PolicyNames']:
+                iam_client.delete_role_policy(RoleName=role_name,PolicyName=policy_name)
+                remediation.update("SUCCESS", f"FIS Experiment Template IAM role {role_name} inline policy {policy_name} has been deleted")
+        else:
+            print("This role doesnn't have any inline policies")
+            return
+        #delete the IAM role
+        response = iam_client.delete_role(RoleName=role_name)
+        remediation.update("SUCCESS", f"FIS Experiment Template {role_name} has been deleted")
+        logs_manager.info(f"FIS Experiment Template {role_name} has been deleted")
+    except Exception as e:
+        remediation.update("FAIL", f"{e}")
         logs_manager.error(e)
