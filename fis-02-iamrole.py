@@ -5,7 +5,7 @@ def get_resource_id(event_manager, service_manager, logs_manager):
         responseElements = event_manager.get_value('responseElements')
         experimentTemplate = responseElements["experimentTemplate"]
         Id = experimentTemplate["id"]
-        roleARN = experimentTemplate.get("roleArn")  # Use .get() to handle missing keys gracefully
+        roleARN = experimentTemplate.get("roleArn")
         logs_manager.info(f"FIS with {Id} has been identified. Resource Id has been recorded")
         return Id, roleARN, experimentTemplate
     except Exception as e:
@@ -16,10 +16,14 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
     try:
         fis_client = service_manager.get_client("fis")
         iam_client = service_manager.get_client("iam")
+        
         Id, roleARN, experimentTemplate = resource_id
-        # Extract template_id and role_arn from resource_id
+
+        if roleARN is None:
+            logs_manager.error("roleARN is None")
+            return
+
         role_name = roleARN.split('/')[-1]
-        experiment_template = experimentTemplate
         
         # Initialize variables to store policy information
         aws_managed_policies = []
@@ -51,7 +55,7 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
                             customer_managed_policy_actions.append(actions)
                     if 'Resource' in statement:
                         resource = statement['Resource']
-                        if resource == ["*"]:
+                        if isinstance(resource, list) and "*" in resource:
                             customer_managed_policy_resources_with_star.append(policy_info['Policy']['PolicyName'])
         
         # Get inline policies
@@ -80,10 +84,11 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
         
         # Compare actions with target_services
         target_services = set()
-        for target in experiment_template['targets']:
-            resource_type = target['resourceType']
-            service_name = resource_type.split(':')[1]  # Extract service name
-            target_services.add(service_name)
+        for target_key, target in experimentTemplate.get('targets', {}).items():
+            resource_type = target.get('resourceType', '')
+            if resource_type:
+                service_name = resource_type.split(':')[1]  # Extract service name
+                target_services.add(service_name)
         
         for actions in [inline_policy_actions, customer_managed_policy_actions]:
             for action in actions:
@@ -97,21 +102,17 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
         # Condition 1: Check for AWS managed policies
         if aws_managed_policies:
             compliant = False
-            print("test-1")
         
         # Condition 2: Check for extra actions
         if extra_actions:
             compliant = False
-            print("test-2")
         
         # Condition 3: Check for * in customer managed policies or inline policies
         if inline_policy_resources_with_star or customer_managed_policy_resources_with_star:
             compliant = False
-            print("test-3")
         
         # Determine compliance status
         compliance_status = 'Compliant' if compliant else 'Non-Compliant'
-        print("test-4")
         
         # Update compliance and logs based on compliance status
         if compliant:
@@ -121,34 +122,41 @@ def evaluate(resource_id, event_manager, service_manager, logs_manager, complian
             compliance.update("NON-COMPLIANT", f"FIS Experiment Template {Id} is non-compliant")
             logs_manager.info(f"FIS Experiment Template {Id} IAM role is overly permissive")
         
-        # Construct response
-        # response_body = {
-            # 'AWSManagedPolicies': aws_managed_policies,
-            # 'InlinePolicyActions': inline_policy_actions,
-            # 'InlinePolicyResourcesWithStar': inline_policy_resources_with_star,
-            # 'CustomerManagedPolicyActions': customer_managed_policy_actions,
-            # 'CustomerManagedPolicyResourcesWithStar': customer_managed_policy_resources_with_star,
-            # 'ExtraActions': list(extra_actions),
-            # 'ComplianceStatus': compliance_status
-        # }
-        # 
-        # return {
-            # 'statusCode': 200,
-            # 'body': response_body
-        # }
-    
     except Exception as e:
         compliance.update("UNKNOWN", f"{e}")
         logs_manager.error(e)
 
 def remediate(resource_id, event_manager, service_manager, logs_manager, remediation):
-    fis_client = service_manager.get_client("fis")
-    iam_client = service_manager.get_client("iam")
-    roleARN, Id = resource_id
     try:
-        response = fis_client.delete_experiment_template(id= Id)
-        remediation.update("SUCCESS", f"FIS Experiment Template {Id} has been deleted")
-        logs_manager.info(f"FIS Experiment Template {Id} has been deleted")
+        fis_client = service_manager.get_client("fis")
+        iam_client = service_manager.get_client("iam")
+        
+        Id, roleARN, experimentTemplate = resource_id
+        role_name = roleARN.split('/')[-1]
+        
+        # Check for and detach managed policies
+        aws_managed_policies = iam_client.list_attached_role_policies(RoleName=role_name)
+        if aws_managed_policies['AttachedPolicies']:
+            for policy in aws_managed_policies['AttachedPolicies']:
+                policy_arn = policy['PolicyArn']
+                iam_client.detach_role_policy(RoleName=role_name, PolicyArn=policy_arn)
+                remediation.update("SUCCESS", f"FIS Experiment Template IAM role {role_name} managed policy {policy['PolicyName']} has been detached")
+        else:
+            logs_manager.info("No Managed Policies attached to this IAM role")
+        
+        # Check for and delete inline policies
+        inline_policies = iam_client.list_role_policies(RoleName=role_name)
+        if inline_policies['PolicyNames']:
+            for policy_name in inline_policies['PolicyNames']:
+                iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+                remediation.update("SUCCESS", f"FIS Experiment Template IAM role {role_name} inline policy {policy_name} has been deleted")
+        else:
+            logs_manager.info("This role doesn't have any inline policies")
+        
+        # Delete the IAM role
+        iam_client.delete_role(RoleName=role_name)
+        remediation.update("SUCCESS", f"FIS Experiment Template IAM role {role_name} has been deleted")
+        logs_manager.info(f"FIS Experiment Template IAM role {role_name} has been deleted")
     except Exception as e:
         remediation.update("FAIL", f"{e}")
         logs_manager.error(e)
